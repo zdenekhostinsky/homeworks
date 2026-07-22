@@ -1,0 +1,13 @@
+# Secrets
+finetune/.env
+
+# Python
+finetune/__pycache__/
+*.pyc
+
+# Internal/proprietary ILP documentation and data derived from it - kept local only
+sources/
+finetune/data/
+
+# Local submission package (redundant with repo contents)
+lekce6_finetuning_submission.zip
