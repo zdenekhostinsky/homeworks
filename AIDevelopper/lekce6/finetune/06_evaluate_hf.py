@@ -9,8 +9,8 @@ from openpyxl import Workbook
 
 from config import HF_JOB_INFO_FILE, HF_RESULTS_FILE, JUDGE_MODEL, RESULTS_DIR
 
-JUDGE_PROMPT = """You are grading answers from a support assistant for the ILP Logistics \
-Application (ILP) against a reference answer.
+JUDGE_PROMPT = """You are grading answers from a support assistant for the Internal \
+Logistics Platform (ILP) against a reference answer.
 
 Question: {question}
 Reference answer: {reference}

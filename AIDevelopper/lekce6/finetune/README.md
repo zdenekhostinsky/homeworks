@@ -5,8 +5,8 @@ dokumentace), porovnat odpovědi před/po a vyhodnotit pomocí benchmarkingu.
 
 ## Zdrojová data
 
-738 Q&A párů vygenerovaných z ~275stránkové technické dokumentace ILP
-(`sources/result/ILPDocumentation_dataset.jsonl`, mimo tento balíček – interní materiál).
+738 Q&A párů vygenerovaných z ~275stránkové interní technické dokumentace ILP
+(zdrojový dataset mimo tento balíček – interní/proprietární materiál zaměstnavatele).
 
 Rozdělení (`01_prepare_dataset.py`, seed=42):
 
@@ -65,8 +65,10 @@ python 06_evaluate_hf.py       # pár desítek centů na OpenAI (jen judge, ne f
 | shoda | – | 1/20 |
 | horší po fine-tuningu | – | 4/20 |
 
-Zlepšení o **+37 % relativně**. Kompletní tabulka se všemi 20 otázkami, referenčními
-odpověďmi, odpověďmi před/po a bodováním je v `results/comparison_hf.xlsx`.
+Zlepšení o **+37 % relativně**. Agregovaná čísla jsou v `results/comparison_summary.xlsx`.
+Kompletní tabulka se všemi 20 otázkami, referenčními odpověďmi, odpověďmi před/po a
+bodováním (`results/comparison_hf.xlsx`) obsahuje reálný text z interní dokumentace,
+takže není součástí tohoto repozitáře – jen v balíčku předaném přímo lektorovi.
 
 Kvalitativně: bázový model o interním systému ILP nic nevěděl a odpovídal obecnými,
 vágními frázemi. Po fine-tuningu začal používat konkrétní terminologii a fakta z
@@ -75,6 +77,6 @@ fine-tuning znalosti skutečně "natlačil" do vah modelu.
 
 ## Poznámka k datům
 
-Zdrojová ILP dokumentace i z ní odvozený dataset obsahují interní/proprietární detaily
-zaměstnavatele, proto nejsou součástí tohoto balíčku ani žádného veřejného repozitáře –
-jen v `results/comparison_hf.xlsx` pro účely hodnocení tohoto úkolu.
+Zdrojová dokumentace ILP i z ní odvozený dataset a plná tabulka odpovědí obsahují
+interní/proprietární detaily zaměstnavatele, proto nejsou součástí tohoto (veřejně
+sdíleného) repozitáře – jen v balíčku předaném přímo lektorovi.

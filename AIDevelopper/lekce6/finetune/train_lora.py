@@ -21,7 +21,7 @@ from trl import SFTConfig, SFTTrainer
 
 SYSTEM_PROMPT = (
     "You are a support assistant for the Internal Logistics Platform (ILP), "
-    "the company's core logistics platform. Answer questions about ILP "
+    "the company's core logistics platform. Answer questions about the ILP "
     "accurately and concisely, based on its technical documentation."
 )
 

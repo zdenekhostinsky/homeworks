@@ -8,8 +8,8 @@ from openpyxl import Workbook
 
 from config import BASE_MODEL, EVAL_FILE, JOB_INFO_FILE, RESULTS_DIR, RESULTS_FILE, SYSTEM_PROMPT
 
-JUDGE_PROMPT = """You are grading answers from a support assistant for the ILP Logistics \
-Application (ILP) against a reference answer.
+JUDGE_PROMPT = """You are grading answers from a support assistant for the Internal \
+Logistics Platform (ILP) against a reference answer.
 
 Question: {question}
 Reference answer: {reference}
