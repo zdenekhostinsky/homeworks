@@ -1,8 +1,23 @@
+import os
 from pathlib import Path
+
+from dotenv import load_dotenv
 
 BASE_DIR = Path(__file__).resolve().parent
 
-SOURCE_DATASET = BASE_DIR.parent / "sources" / "result" / "ILPDocumentation_dataset.jsonl"
+# Loaded here (not just in the scripts) so that SOURCE_DATASET below can be
+# overridden from .env - config is imported before any script calls main().
+load_dotenv(BASE_DIR / ".env")
+
+# Q&A dataset derived from the internal documentation. The file itself is
+# proprietary and stays out of this repo - point SOURCE_DATASET in .env at
+# your local copy.
+SOURCE_DATASET = Path(
+    os.environ.get(
+        "SOURCE_DATASET",
+        BASE_DIR.parent / "sources" / "result" / "ilp_docs_dataset.jsonl",
+    )
+)
 
 DATA_DIR = BASE_DIR / "data"
 TRAIN_FILE = DATA_DIR / "train.jsonl"
@@ -32,8 +47,8 @@ VALID_RATIO = 0.1  # share of the remaining pairs used as OpenAI validation set
 
 # --- Hugging Face Jobs route (replaces the blocked OpenAI fine-tuning route) ---
 HF_BASE_MODEL = "Qwen/Qwen2.5-1.5B-Instruct"
-HF_DATASET_REPO_SUFFIX = "ala-docs-ft-data"
-HF_MODEL_REPO_SUFFIX = "ala-docs-qwen2.5-1.5b-lora"
+HF_DATASET_REPO_SUFFIX = "ilp-docs-ft-data"
+HF_MODEL_REPO_SUFFIX = "ilp-docs-qwen2.5-1.5b-lora"
 HF_JOB_FLAVOR = "t4-medium"  # $0.60/h, 1x T4 16GB - plenty for a 1.5B QLoRA job
 HF_JOB_TIMEOUT = "2h"
 HF_JOB_INFO_FILE = BASE_DIR / "hf_finetune_job.json"

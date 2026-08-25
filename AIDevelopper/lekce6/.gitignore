@@ -10,5 +10,13 @@ sources/
 finetune/data/
 finetune/results/comparison_hf.xlsx
 
+# Report for the lecturer - names the real internal system, kept local only
+finetune/make_pdf_report.py
+finetune/results/*.pdf
+
+# Run artifact - contains the real HF account and repo names
+finetune/hf_finetune_job.json
+finetune/finetune_job.json
+
 # Local submission package (redundant with repo contents)
 lekce6_finetuning_submission.zip

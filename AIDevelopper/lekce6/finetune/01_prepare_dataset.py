@@ -1,4 +1,4 @@
-"""Step 1: turn ILPDocumentation_dataset.jsonl into OpenAI fine-tuning files."""
+"""Step 1: turn the source Q&A dataset into OpenAI fine-tuning files."""
 
 import json
 import random

@@ -63,7 +63,7 @@ def main():
                 training_file=train_file_id,
                 validation_file=valid_file_id,
                 model=BASE_MODEL,
-                suffix="ala-docs",
+                suffix="ilp-docs",
             )
         except (PermissionDeniedError, BadRequestError) as e:
             print("Job creation was rejected. This is the expected symptom if your org does not")
