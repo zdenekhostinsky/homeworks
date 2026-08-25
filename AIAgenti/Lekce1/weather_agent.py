@@ -10,6 +10,7 @@ volani nastroje.
 Pouziti:
     python weather_agent.py "Kdy je nejlepsi vydat se na vylet v pristim tydnu?"
     python weather_agent.py            # zepta se interaktivne
+    python weather_agent.py --verbose "..."   # vypise, jestli se volal nastroj
 
 Nastroj pro pocasi vyuziva volne dostupne Open-Meteo API (geokodovani nazvu
 mesta + predpoved az na 16 dni dopredu), takze funguje bez dalsiho API
@@ -173,7 +174,13 @@ def _extract_text(response) -> str:
     return "\n".join(block.text for block in response.content if block.type == "text").strip()
 
 
-def run_agent(prompt: str, client: Anthropic) -> str:
+def _log(verbose: bool, message: str) -> None:
+    """Diagnosticky vypis (jde na stderr, aby neplet do vlastni odpovedi)."""
+    if verbose:
+        print(message, file=sys.stderr)
+
+
+def run_agent(prompt: str, client: Anthropic, verbose: bool = False) -> str:
     messages = [{"role": "user", "content": prompt}]
 
     response = client.messages.create(
@@ -188,12 +195,18 @@ def run_agent(prompt: str, client: Anthropic) -> str:
     if response.stop_reason != "tool_use" or not tool_calls:
         # Dotaz se pocasi netykal (nebo mu model nerozumel) - vracime
         # rovnou odpoved z LLM API bez volani nastroje.
+        _log(verbose, "[agent] Model nastroj nezavolal - odpovida primo LLM.")
         return _extract_text(response)
 
     messages.append({"role": "assistant", "content": response.content})
 
     tool_results = []
     for block in tool_calls:
+        _log(
+            verbose,
+            f"[agent] Model vola nastroj {block.name} "
+            f"s parametry {json.dumps(block.input, ensure_ascii=False)}",
+        )
         if block.name == "get_weather":
             result = get_weather(
                 city=block.input.get("city", DEFAULT_CITY),
@@ -201,6 +214,14 @@ def run_agent(prompt: str, client: Anthropic) -> str:
             )
         else:
             result = {"error": f"Neznamy nastroj: {block.name}"}
+        if "error" in result:
+            _log(verbose, f"[agent] Nastroj vratil chybu: {result['error']}")
+        else:
+            _log(
+                verbose,
+                f"[agent] Nastroj vratil {len(result['predpoved'])} dni "
+                f"predpovedi pro {result['mesto']}, {result['zeme']}.",
+            )
         tool_results.append(
             {
                 "type": "tool_result",
@@ -211,6 +232,7 @@ def run_agent(prompt: str, client: Anthropic) -> str:
 
     # Vysledek nastroje se posle zpet LLM, aby z nej sestavil finalni odpoved.
     messages.append({"role": "user", "content": tool_results})
+    _log(verbose, "[agent] Posilam vysledek nastroje zpet modelu.")
 
     final_response = client.messages.create(
         model=MODEL_NAME,
@@ -232,13 +254,17 @@ def main():
         )
         sys.exit(1)
 
-    prompt = " ".join(sys.argv[1:]).strip() if len(sys.argv) > 1 else input("Zadej dotaz: ").strip()
+    args = sys.argv[1:]
+    verbose = any(a in ("--verbose", "-v") for a in args)
+    args = [a for a in args if a not in ("--verbose", "-v")]
+
+    prompt = " ".join(args).strip() if args else input("Zadej dotaz: ").strip()
     if not prompt:
         print("Prazdny dotaz.", file=sys.stderr)
         sys.exit(1)
 
     client = Anthropic(api_key=api_key)
-    print(run_agent(prompt, client))
+    print(run_agent(prompt, client, verbose=verbose))
 
 
 if __name__ == "__main__":

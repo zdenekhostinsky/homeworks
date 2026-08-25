@@ -34,6 +34,20 @@ Nebo interaktivne (bez argumentu skript o dotaz sam pozada):
 python weather_agent.py
 ```
 
+S prepinacem `--verbose` (nebo `-v`) skript navic na stderr vypise, jestli
+model nastroj zavolal a s jakymi parametry - hodi se na ukazku, ze o
+pouziti nastroje rozhoduje model sam:
+
+```bash
+python weather_agent.py --verbose "Kdy je nejlepsi vydat se na vylet v pristim tydnu?"
+```
+
+```
+[agent] Model vola nastroj get_weather s parametry {"city": "Praha", "days_ahead": 7}
+[agent] Nastroj vratil 7 dni predpovedi pro Praha, Česko.
+[agent] Posilam vysledek nastroje zpet modelu.
+```
+
 Priklady promptu:
 
 - `"Kdy je nejlepsi vydat se na vylet v pristim tydnu?"` -> pouzije se
