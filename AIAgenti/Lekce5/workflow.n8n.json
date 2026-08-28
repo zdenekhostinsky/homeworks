@@ -1,0 +1,327 @@
+{
+  "name": "AI Sekretarka - Multi-PC Task Dispatcher",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 15
+            }
+          ]
+        }
+      },
+      "id": "trigger-cron",
+      "name": "Cron - kazdych 15 min",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [-1120, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://graph.microsoft.com/v1.0/me/chats/{{$json.chatId}}/messages",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "microsoftOAuth2Api",
+        "options": {
+          "qs": {
+            "parameters": {
+              "parameter": [
+                { "name": "$top", "value": "50" }
+              ]
+            }
+          }
+        }
+      },
+      "id": "read-teams",
+      "name": "Precti Teams zpravy",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [-880, 180],
+      "notes": "MS Graph, obdoba teams-chat skillu: nove/neprectene zpravy za posledni interval."
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "http://localhost:4000/api/claude-sessions/recent",
+        "options": {
+          "qs": {
+            "parameters": [
+              { "name": "since_minutes", "value": "15" }
+            ]
+          }
+        }
+      },
+      "id": "read-claude-sessions",
+      "name": "Precti Claude Code session log",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [-880, 420],
+      "notes": "Lokalni endpoint/agent, ktery exportuje posledni radky ze session transcriptu (napr. \"udelej X na Y\")."
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combinationMode": "multiplex"
+      },
+      "id": "merge-signals",
+      "name": "Merge signalu",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [-640, 300]
+    },
+    {
+      "parameters": {
+        "operation": "select",
+        "schema": "public",
+        "table": {
+          "value": "computer_registry"
+        },
+        "returnAll": true
+      },
+      "id": "get-registry",
+      "name": "Postgres - Registr pocitacu",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [-640, 540],
+      "notes": "Tabulka: computer_name, capabilities, instructions, webhook_url, is_online"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Slouci signal (Teams/Claude Code zprava) + registr pocitacu do jednoho promptu pro LLM\nconst registry = $('Postgres - Registr pocitacu').all().map(i => i.json);\nconst signal = $json;\n\nreturn [{\n  json: {\n    signal_text: signal.text || signal.body?.content || JSON.stringify(signal),\n    signal_source: signal.source || 'unknown',\n    registry\n  }\n}];"
+      },
+      "id": "build-prompt-context",
+      "name": "Priprav kontext pro LLM",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-400, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "anthropicApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "anthropic-version", "value": "2023-06-01" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ {\n  \"model\": \"claude-sonnet-5\",\n  \"max_tokens\": 512,\n  \"system\": \"Jsi dispecer AI sekretarky. Dostanes signal (zprava z Teams nebo z Claude Code session logu) a registr dostupnych pocitacu s jejich schopnostmi/instrukcemi. Uloha: rozhodni, jestli signal obsahuje ukol k provedeni, a pokud ano, vyber JEDEN cilovy pocitac podle jeho capabilities/instructions. Odpovez VYHRADNE JSON: {\\\"has_task\\\": bool, \\\"task\\\": string, \\\"target_computer\\\": string, \\\"reason\\\": string}. Pokud zadny pocitac nesedi nebo signal neni ukol, has_task=false.\",\n  \"messages\": [\n    { \"role\": \"user\", \"content\": \"SIGNAL:\\n\" + $json.signal_text + \"\\n\\nREGISTR POCITACU:\\n\" + JSON.stringify($json.registry) }\n  ]\n} }}"
+      },
+      "id": "llm-classify",
+      "name": "LLM - klasifikace + vyber pocitace",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [-160, 300],
+      "notes": "Claude rozhoduje sam, jestli je to ukol a na ktery pocitac (child agenta) patri - stejny princip jako tool-use v Lekci 1."
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $json.content?.[0]?.text || '{}';\nlet parsed;\ntry { parsed = JSON.parse(raw); } catch (e) { parsed = { has_task: false }; }\nreturn [{ json: parsed }];"
+      },
+      "id": "parse-llm-output",
+      "name": "Parsuj LLM JSON",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [80, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [
+            {
+              "leftValue": "={{$json.has_task}}",
+              "rightValue": true,
+              "operator": { "type": "boolean", "operation": "true" }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "filter-has-task",
+      "name": "Ma to byt ukol?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [320, 300]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "conditions": [
+                  { "leftValue": "={{$json.target_computer}}", "rightValue": "notebook", "operator": { "type": "string", "operation": "equals" } }
+                ]
+              },
+              "outputKey": "notebook"
+            },
+            {
+              "conditions": {
+                "conditions": [
+                  { "leftValue": "={{$json.target_computer}}", "rightValue": "domaci-pc", "operator": { "type": "string", "operation": "equals" } }
+                ]
+              },
+              "outputKey": "domaci-pc"
+            },
+            {
+              "conditions": {
+                "conditions": [
+                  { "leftValue": "={{$json.target_computer}}", "rightValue": "pracovni-pc", "operator": { "type": "string", "operation": "equals" } }
+                ]
+              },
+              "outputKey": "pracovni-pc"
+            }
+          ]
+        }
+      },
+      "id": "switch-target-pc",
+      "name": "Switch podle cilove pocitace",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [560, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Postgres - Registr pocitacu').all().find(r => r.json.computer_name === 'notebook').json.webhook_url }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { task: $json.task, reason: $json.reason, dispatched_at: $now.toISO() } }}"
+      },
+      "id": "dispatch-notebook",
+      "name": "Dispatch -> notebook (child agent)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [820, 140]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Postgres - Registr pocitacu').all().find(r => r.json.computer_name === 'domaci-pc').json.webhook_url }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { task: $json.task, reason: $json.reason, dispatched_at: $now.toISO() } }}"
+      },
+      "id": "dispatch-domaci-pc",
+      "name": "Dispatch -> domaci PC (child agent)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [820, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Postgres - Registr pocitacu').all().find(r => r.json.computer_name === 'pracovni-pc').json.webhook_url }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { task: $json.task, reason: $json.reason, dispatched_at: $now.toISO() } }}"
+      },
+      "id": "dispatch-pracovni-pc",
+      "name": "Dispatch -> pracovni PC (child agent)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [820, 460]
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "schema": "public",
+        "table": { "value": "task_log" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "task": "={{$json.task}}",
+            "target_computer": "={{$json.target_computer}}",
+            "reason": "={{$json.reason}}",
+            "dispatched_at": "={{$now.toISO()}}"
+          }
+        }
+      },
+      "id": "log-task",
+      "name": "Postgres - Zaloguj ukol",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [1060, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://graph.microsoft.com/v1.0/me/chats/{{$json.notifyChatId}}/messages",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "microsoftOAuth2Api",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { body: { content: \"Ukol '\" + $json.task + \"' poslan na \" + $json.target_computer + \".\" } } }}"
+      },
+      "id": "notify-teams",
+      "name": "Potvrzeni zpet do Teams",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1300, 300],
+      "notes": "Outward-facing krok (posila zpravu) - v realnem nasazeni by mel jit prez potvrzeni, viz README."
+    }
+  ],
+  "connections": {
+    "Cron - kazdych 15 min": {
+      "main": [[{ "node": "Precti Teams zpravy", "type": "main", "index": 0 }, { "node": "Precti Claude Code session log", "type": "main", "index": 0 }]]
+    },
+    "Precti Teams zpravy": {
+      "main": [[{ "node": "Merge signalu", "type": "main", "index": 0 }]]
+    },
+    "Precti Claude Code session log": {
+      "main": [[{ "node": "Merge signalu", "type": "main", "index": 1 }]]
+    },
+    "Merge signalu": {
+      "main": [[{ "node": "Postgres - Registr pocitacu", "type": "main", "index": 0 }]]
+    },
+    "Postgres - Registr pocitacu": {
+      "main": [[{ "node": "Priprav kontext pro LLM", "type": "main", "index": 0 }]]
+    },
+    "Priprav kontext pro LLM": {
+      "main": [[{ "node": "LLM - klasifikace + vyber pocitace", "type": "main", "index": 0 }]]
+    },
+    "LLM - klasifikace + vyber pocitace": {
+      "main": [[{ "node": "Parsuj LLM JSON", "type": "main", "index": 0 }]]
+    },
+    "Parsuj LLM JSON": {
+      "main": [[{ "node": "Ma to byt ukol?", "type": "main", "index": 0 }]]
+    },
+    "Ma to byt ukol?": {
+      "main": [[{ "node": "Switch podle cilove pocitace", "type": "main", "index": 0 }]]
+    },
+    "Switch podle cilove pocitace": {
+      "main": [
+        [{ "node": "Dispatch -> notebook (child agent)", "type": "main", "index": 0 }],
+        [{ "node": "Dispatch -> domaci PC (child agent)", "type": "main", "index": 0 }],
+        [{ "node": "Dispatch -> pracovni PC (child agent)", "type": "main", "index": 0 }]
+      ]
+    },
+    "Dispatch -> notebook (child agent)": {
+      "main": [[{ "node": "Postgres - Zaloguj ukol", "type": "main", "index": 0 }]]
+    },
+    "Dispatch -> domaci PC (child agent)": {
+      "main": [[{ "node": "Postgres - Zaloguj ukol", "type": "main", "index": 0 }]]
+    },
+    "Dispatch -> pracovni PC (child agent)": {
+      "main": [[{ "node": "Postgres - Zaloguj ukol", "type": "main", "index": 0 }]]
+    },
+    "Postgres - Zaloguj ukol": {
+      "main": [[{ "node": "Potvrzeni zpet do Teams", "type": "main", "index": 0 }]]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": false
+  }
+}
